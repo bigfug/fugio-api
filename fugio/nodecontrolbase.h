@@ -54,7 +54,7 @@ class NodeControlBase : public QObject, public fugio::NodeControlInterface
 
 public:
 	explicit NodeControlBase( QSharedPointer<fugio::NodeInterface> pNode )
-		: mNode( pNode ), mPidIdx( 0 ), mInitialisedCalled( false ), mDeinitialisedCalled( false )
+		: mNode( pNode ), mPidIdx( 0 ), mInitialisedCalled( false ), mDeinitialisedCalled( false ), mIsPairing( false )
 	{
 		// this will be going soon
 
@@ -521,38 +521,56 @@ private:
 private slots:
 	void pairedPinAddedHelper( QSharedPointer<fugio::PinInterface> pPin )
 	{
-		if( pPin->direction() == PIN_INPUT )
+		// if this node is currently pairing then return
+
+		if( mIsPairing )
 		{
-			fugio::PairedPinsHelperInterface		*PPHI = qobject_cast<fugio::PairedPinsHelperInterface *>( this );
+			return;
+		}
 
-			if( !PPHI )
+		fugio::PairedPinsHelperInterface		*PPHI = qobject_cast<fugio::PairedPinsHelperInterface *>( this );
+
+		if( !PPHI )
+		{
+			qWarning() << "Paired pin helper doesn't have fugio::PairedPinsHelperInterface as interface";
+
+			return;
+		}
+
+		QSharedPointer<fugio::PinInterface> DstPin;
+
+		if( !pPin->pairedUuid().isNull() )
+		{
+			DstPin = mNode->findPinByLocalId( pPin->pairedUuid() );
+
+			if( DstPin )
 			{
-				qWarning() << "Paired pin helper doesn't have fugio::PairedPinsHelperInterface as interface";
-
 				return;
 			}
+		}
 
-			QSharedPointer<fugio::PinInterface> DstPin;
+		if( !DstPin )
+		{
+			// we need to set a known id here because when we create the paired pin this
+			// helper function will get called recursively
 
-			if( !pPin->pairedUuid().isNull() )
-			{
-				DstPin = mNode->findPinByLocalId( pPin->pairedUuid() );
+			mIsPairing = true;
 
-				if( DstPin )
-				{
-					return;
-				}
-			}
-
-			if( !DstPin )
+			if( pPin->direction() == PIN_INPUT )
 			{
 				pinOutput<fugio::VariantInterface *>( pPin->name(), DstPin, PPHI->pairedPinControlUuid( pPin ), QUuid::createUuid() );
-
-				if( DstPin )
-				{
-					mNode->pairPins( pPin, DstPin );
-				}
 			}
+			else
+			{
+				DstPin = pinInput( pPin->name(), QUuid::createUuid() );
+			}
+
+			if( DstPin )
+			{
+				mNode->pairPins( pPin, DstPin );
+			}
+
+			mIsPairing = false;
 		}
 	}
 
@@ -601,6 +619,7 @@ protected:
 private:
 	bool									 mInitialisedCalled;
 	bool									 mDeinitialisedCalled;
+	bool									 mIsPairing;
 
 private:
 	Q_DISABLE_COPY( NodeControlBase )
