@@ -570,6 +570,14 @@ private slots:
 	}
 
 protected:
+	void nodeUpdate( void )
+	{
+		if( node() && node()->context() )
+		{
+			node()->context()->updateNode( node() );
+		}
+	}
+
 	//-------------------------------------------------------------------------
 	// don't use this in new code!
 
